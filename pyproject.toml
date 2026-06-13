@@ -1,0 +1,81 @@
+# =============================================================================
+# PhysDock: Project Configuration (pyproject.toml)
+# =============================================================================
+# This file is the modern standard (PEP 517/518) for packaging Python projects. 
+# It defines the project metadata, build system, and precisely maps out the 
+# dependencies required to run the PhysDock pipeline.
+
+# -----------------------------------------------------------------------------
+# Build System Definition
+# -----------------------------------------------------------------------------
+[build-system]
+# Specifies the tools pip needs just to build the package from source.
+requires = ["setuptools>=68", "wheel"]
+# Defines the backend interface that will actually execute the build process.
+build-backend = "setuptools.build_meta"
+
+
+# -----------------------------------------------------------------------------
+# Core Project Metadata
+# -----------------------------------------------------------------------------
+[project]
+name = "physdock"                                 # The official package name (used in pip install physdock)
+version = "0.1.0"                                 # Semantic versioning (matches the __init__.py version)
+description = "Physics-aware diffusion co-folding & conformational sampling for protein-ligand interactions (oncology / KRAS G12C)." # A concise, professional summary
+readme = "README.md"                              # Points to the markdown file that will be displayed on PyPI/GitHub
+requires-python = ">=3.10,<3.12"                  # Strict python version constraints. (Ensures compatibility with specific ML libraries that often break on edge Python versions)
+license = { text = "MIT" }                        # Open-source license declaration
+authors = [{ name = "Aris Tsirigotis" }]          # Authorship attribution
+
+
+# -----------------------------------------------------------------------------
+# Base Dependencies (The Lightweight CPU Core)
+# -----------------------------------------------------------------------------
+# Strategic Note:
+# The massive, fragile ML models (DiffDock-L, Boltz-2, PyTorch) are intentionally 
+# EXCLUDED from this base list. Installing them via pip can cause massive dependency 
+# conflicts or ruin a local development environment. 
+# 
+# This base list ensures that `pip install -e .` creates a lightweight, CPU-bound 
+# environment that can safely run the cheminformatics gates, data prep, and smoke 
+# tests on any laptop without needing a GPU or GBs of CUDA libraries.
+dependencies = [
+    "numpy>=1.24,<2.0",                           # Fast numerical arrays (restricted <2.0 due to API breaking changes in numpy 2)
+    "pandas>=2.0,<3.0",                           # Dataframes for the target manifest and evaluation CSVs
+    "scipy>=1.10",                                # Used for the Spearman rank correlation stats
+    "scikit-learn>=1.3",                          # Base machine learning utilities
+    "rdkit>=2023.9",                              # Core cheminformatics: 2D/3D structure parsing, properties, MW, logP, PAINS
+    "biopython>=1.81",                            # Biological structural parsing (PDB file ingestion and sequence extraction)
+    "pyyaml>=6.0",                                # Parses the configurations/target.yaml files
+    "matplotlib>=3.7",                            # Generates the correlation scatter plots in the final markdown report
+    "tqdm>=4.65",                                 # Provides progress bars in the terminal
+    "requests>=2.31",                             # Handles REST API calls (fetching PDBs and querying ChEMBL)
+]
+
+
+# -----------------------------------------------------------------------------
+# Optional Dependencies (The Heavy GPU/Physics Tiers)
+# -----------------------------------------------------------------------------
+# These are isolated. A user must explicitly ask for them (e.g., `pip install -e .[physics]`)
+# This protects users who just want to run the analytical stages from installing heavy C++ physics engines.
+[project.optional-dependencies]
+
+# The OpenMM Thermodynamic Relaxation Path
+physics = [
+    "openmm>=8.1",                                # The core GPU-accelerated molecular physics engine
+    "openmmforcefields>=0.12",                    # Wrappers to map small-molecule force fields
+    "openff-toolkit>=0.15",                       # Open Force Field toolkit (assigns GAFF2 parameters to the AI-generated drugs)
+    "pdbfixer>=1.9",                              # Utilities to repair malformed PDB crystal structures before physics simulations
+]
+
+# The Advanced Geometric Validation Path
+rmsd = [
+    "spyrmsd>=0.6",                               # Calculates symmetry-corrected RMSD (preventing the AI from being penalized for flipping symmetrical rings like benzene)
+]
+
+
+# -----------------------------------------------------------------------------
+# Package Discovery
+# -----------------------------------------------------------------------------
+[tool.setuptools.packages.find]
+include = ["physdock*"]                           # Tells setuptools to bundle any folder starting with "physdock" into the final installed package

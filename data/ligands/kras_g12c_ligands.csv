@@ -1,0 +1,18 @@
+# KRAS G12C ligand manifest.
+# Poses (reference SDF) and SMILES are EXTRACTED FROM THE DEPOSITED STRUCTURE by
+# scripts/01_prepare_target.py — do not hand-edit SMILES here.
+# Columns:
+#   ligand_id    : your label
+#   pdb_id       : co-crystal to pull the ligand + reference pose from
+#   ligand_resname: 3-letter HET code of the ligand inside that PDB
+#   pchembl      : experimental affinity as pChEMBL (-log10[M]); LEAVE BLANK if unknown.
+#                  Fill from ChEMBL/BindingDB before trusting the affinity correlation
+#                  (scripts/fetch_chembl_affinities.py helps). Blank rows are still
+#                  used for pose/RMSD evaluation, just excluded from the affinity stat.
+#   role         : free text (covalent inhibitor, fragment, tool compound...)
+#   verify       : set to 1 only after you've confirmed the pdb_id/resname pairing.
+ligand_id,pdb_id,ligand_resname,pchembl,role,verify
+sotorasib,6OIM,6O7,,covalent_clinical,0
+adagrasib,6UT0,LM6,,covalent_clinical,0
+ars1620,5V9U,8KX,,covalent_tool,0
+ars853,5F2E,5V8,,covalent_tool,0

@@ -1,0 +1,46 @@
+# =============================================================================
+# PhysDock: Environment & Dependency Manifest
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Core (always installable, CPU-OK). Mirrors pyproject [project.dependencies].
+# -----------------------------------------------------------------------------
+# These packages constitute the lightweight analytical backbone. They install 
+# quickly and safely on any standard machine (Mac/Windows/Linux) without requiring 
+# heavy C++ compilers or GPU drivers.
+numpy>=1.24,<2.0          # Foundation for vectorized array math (restricted <2.0 for API stability)
+pandas>=2.0,<3.0          # Handles tabular data manipulation (the target manifest and output ledgers)
+scipy>=1.10               # Provides the spearmanr statistical functions for the evaluation stage
+scikit-learn>=1.3         # Base machine learning and clustering utilities (used in ensemble analysis)
+rdkit>=2023.9             # Industry-standard cheminformatics (validates valency, calculates 2D/3D properties)
+biopython>=1.81           # Parses raw X-ray crystallography PDB files and extracts amino acid sequences
+pyyaml>=6.0               # Parses the target configurations (configs/kras_g12c.yaml)
+matplotlib>=3.7           # Generates the correlation scatter plots for the final Markdown report
+tqdm>=4.65                # Renders progress bars in the terminal for long loops
+requests>=2.31            # Executes REST API calls (downloading PDBs from RCSB, fetching ChEMBL affinities)
+
+# -----------------------------------------------------------------------------
+# ----------------------------- Heavy / optional ------------------------------
+# -----------------------------------------------------------------------------
+# The following sections act as explicit warnings and installation blueprints for 
+# the DevOps/Infrastructure setup.
+
+# Physics (proper path):
+#   pip install "openmm>=8.1" openmmforcefields openff-toolkit pdbfixer
+#   -> Why segregated? OpenMM requires specific C++ libraries. Keeping it optional 
+#      ensures users can run the lightweight proxy on CPU without breaking their environment.
+
+# RMSD (symmetry-correct):
+#   pip install spyrmsd
+#   -> Why segregated? SpyRMSD involves complex graph-isomorphism math. If it fails 
+#      to install, the pipeline smoothly falls back to RDKit's standard RMSD.
+
+# DiffDock-L: clone the official repo + its own env file (do NOT pip it here).
+#   -> Why segregated? DiffDock is an academic research repository, not a standardized 
+#      PyPI package. It must be cloned directly from GitHub and run in its own siloed 
+#      environment to prevent its legacy dependencies from breaking the modern PhysDock core.
+
+# Boltz-2: pip install boltz   (pulls torch; pin CUDA build to match the AMI driver)
+#   -> Why segregated? Boltz-2 requires PyTorch. PyTorch binaries are massive (~2GB) 
+#      and must be explicitly matched to the specific NVIDIA CUDA drivers on the AWS 
+#      instance. Blindly pip-installing it locally will ruin the environment.

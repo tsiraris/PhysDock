@@ -1,0 +1,90 @@
+# ==========================================
+# 1. Python & Packaging
+# ==========================================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+dist/
+build/
+sdist/
+wheelhouse/
+*.whl
+
+# ==========================================
+# 2. Virtual Environments
+# ==========================================
+.venv/
+venv/
+ENV/
+env/
+
+# ==========================================
+# 3. Jupyter Notebooks & Checkpoints
+# ==========================================
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+.pytest_cache/
+.tox/
+.coverage
+htmlcov/
+
+# ==========================================
+# 4. Data & Chemistry/Structural Biology Artifacts
+# ==========================================
+# Ignore all data contents but keep the directory structures
+data/raw/*
+data/cache/*
+data/processed/*
+results/
+weights/
+
+# Keep standard gitkeep files
+!data/raw/.gitkeep
+!data/cache/.gitkeep
+!data/processed/.gitkeep
+
+# Molecular & Chemistry structures (Ignored except specific reference CSVs)
+*.pdb
+*.cif
+*.sdf
+!data/ligands/*.csv
+
+# ==========================================
+# 5. MLOps, Tracking & IDEs
+# ==========================================
+wandb/
+mlruns/
+.lightning/
+.tensorboard/
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ==========================================
+# 6. OS & System Specific
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Icon?
+
+# ==========================================
+# 7. Office, Archives & Tools
+# ==========================================
+*.zip
+*.tar.gz
+*.rar
+*.7z
+*.doc
+*.docx
+*.pdf
+*.xml

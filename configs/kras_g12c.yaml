@@ -1,0 +1,87 @@
+# =====================================================================
+# PhysDock target configuration — KRAS G12C
+# =====================================================================
+# Why KRAS G12C: small (~169 aa), landmark oncology target (sotorasib /
+# adagrasib), and it has dozens of high-resolution co-crystal structures in the
+# PDB.  Co-crystals => we get free ground-truth poses to score predicted poses 
+# against (RMSD), which is what turns this from a demo into a *validated* pipeline.
+# ---------------------------------------------------------------------
+
+target:
+  # Identifies the target for logging and biological database fetching.
+  name: KRAS_G12C
+  uniprot: P01116                 # KRAS (isoform 2b carries the G12C oncomutation)
+  reference_pdb: 6OIM             # 4-letter code for a specific crystal structure in the Protein Data Bank (PDB): the docking/co-folding scaffold structure of KRAS bound to the drug Sotorasib (ligand code AMG-510).
+  receptor_chain: A
+  # Resname of the bound ligand in reference_pdb, used to (a) extract the crystal pose as the RMSD reference and (b) locate the binding pocket for docking.
+  reference_ligand_resname: 6O7             # Download the 6OIM structure, and look for the 6O7 "residue name tag" atoms (the PDB code for Sotorasib) to extract as the ligand.
+  pocket_center_source: reference_ligand    # Look at where the 6O7 drug is sitting in the crystal structure, and draw the docking box right there.
+
+# Ligand manifest. Each row is one (or zero) crystal complex + experimental label.
+# 01_prepare_target.py downloads each PDB, extracts the bound ligand to SMILES + a reference SDF pose. 
+# This avoids hand-typed SMILES (a common source of silent errors) — the chemistry comes straight from deposited structures.
+ligands:
+  manifest_csv: data/ligands/kras_g12c_ligands.csv  # Points the pipeline to the list of drugs we want to test. 
+
+# Docking search box (Angstrom), built around the reference ligand centroid.
+box:
+  padding: 8.0                    # Sets the size of the "search box" for the AI, taking the center of the pocket and adds 8.0 Angstroms in every direction. The AI is only allowed to dock the drug inside this specific cubic space.
+
+# Tier A — How to run the diffusion docking model.
+diffdock:
+  enabled: true
+  # The official DiffDock-L CLI changes between releases, so we keep the command
+  # as a template you point at the install. {protein},{ligand_csv},{out} filled in.
+  repo_dir: ${PHYSDOCK_DIFFDOCK_DIR}        # set this env var to your clone
+  inference_cmd: >-                         # Exact command-line arguments the pipeline will use to execute the DiffDock software.
+    python -m inference
+    --protein_ligand_csv {ligand_csv}
+    --out_dir {out}
+    --inference_steps 20
+    --samples_per_complex 16
+    --batch_size 8
+    --actual_steps 18
+    --no_final_step_noise
+  samples_per_complex: 16                   # How many poses to generate per ligand, simulating a conformational ensemble.
+
+# Tier B — co-folding + affinity (controls the AlphaFold3-class co-folding model Boltz-2).
+boltz:
+  enabled: true
+  use_msa_server: true             # true: avoids local Multiple Sequence Alignment (MSA) build; tells the pipeline to fetch it from a cloud server
+  diffusion_samples: 5             # multi-seed => second conformational ensemble
+  recycling_steps: 3               # number of recycling rounds
+  # set false to skip the (heavier) affinity head and only get structure+confidence
+  predict_affinity: true           # Not just predict the shape, but also calculate an affinity score for how tightly the drug binds.
+
+# Physics rescoring - Defines how the OpenMM physics engine will clean up the AI's predictions
+physics:
+  # Mode Options:
+  # "lightweight" : RDKit MMFF ligand-strain + steric-contact score. No protein FF,
+  #                 runs anywhere, used by the smoke test. A *proxy*, not MM-GBSA.
+  # "openmm"      : parameterize ligand (GAFF2/OpenFF), build complex, restrained
+  #                 minimization, report interaction energy + pose drift. Proper path.
+  mode: openmm
+  openmm:
+    forcefield_protein: amber14-all.xml   # Specifies the exact mathematical rules (AMBER force field) used to calculate the physical forces (like van der Waals repulsion) of the protein atoms.
+    water_model: amber14/tip3pfb.xml      # Specifies the water model used in the simulation.
+    minimize_max_iterations: 2000         # Maximum number of iterations for the minimization.
+    # We want the drug/ligand to shift into a stable position, but we don't want the entire protein to unravel or unfold. 
+    restrain_protein_heavy: true          # Hold the heavy atoms of the protein receptor rigidly in place while allowing the drug to wiggle until it finds a thermodynamically stable state without steric clashes.
+    restraint_k_kj_mol_nm2: 1000.0        # The strength of the restraining force.
+
+# Conformational-ensemble analysis.
+ensemble:
+  rmsd_cluster_threshold: 2.0      # If two AI-generated poses are within this Angstrom distance of each other, they are considered essentially identical (same "cluster").
+  confidence_gate:                 # Only keep poses with a confidence score (from both DiffDock and Boltz-2) >= this threshold
+    diffdock_min_confidence: -1.5  # DiffDock confidence (logit-like); keep >= this
+    boltz_min_iptm: 0.5            # Interface pTM gate for co-folded complexes (how confident the AI is about the structure); keep >= this
+
+# Evaluation.
+evaluate:
+  rmsd_success_threshold: 2.0      # Standard "good pose" cutoff vs crystal (A)
+  affinity_label_column: pchembl   # Experimental column to correlate against
+
+# Directories.
+paths:
+  results_dir: results    # Where to store the results
+  weights_dir: weights    # Where to store the model weights
