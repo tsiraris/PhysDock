@@ -17,9 +17,11 @@ It implements two distinct tiers of physics integration:
 
 2. OpenMM Proper Path (GPU-accelerated, Requires [physics] Extra):
    A localized, rigorous thermodynamic simulation. It parameterizes the 
-   ligand with GAFF2/OpenFF and the protein with Amber14. It restrains 
-   the heavy atoms of the protein to prevent unravelling, and runs an 
-   energy minimization sequence on the AI-generated pose. 
+   ligand with GAFF2/OpenFF and the protein with Amber14. Because Amber14 
+   needs explicit hydrogens, the heavy-atom receptor is first completed and 
+   protonated with PDBFixer, and the ligand pose is hydrogenated with RDKit. 
+   It restrains the heavy atoms of the protein to prevent unravelling, and runs 
+   an energy minimization sequence on the AI-generated pose. 
    
    It outputs two critical metrics:
    - Pose Drift (RMSD): How far the physics engine had to move the ligand 
@@ -244,6 +246,7 @@ def score_openmm(ligand_id: str, pose_sdf: Path, receptor_pdb: Path, cfg) -> Phy
         from openmm import Platform                                                      # Import Platform to allow hardware acceleration selection (GPU/CPU).
         from openmmforcefields.generators import SystemGenerator                         # Import SystemGenerator to automatically assign physics parameters.
         from openff.toolkit import Molecule                                              # Import OpenFF Molecule to parse the ligand chemistry for GAFF2.
+        from pdbfixer import PDBFixer                                                    # Import PDBFixer to complete missing heavy atoms and add hydrogens to the receptor.
         import openmm                                                                    # Import the base openmm module.
     except ImportError as e:                                                             # Catch the error if the user hasn't installed the heavy [physics] environment.
         return PhysicsResult(ligand_id, str(pose_sdf), "openmm", ok=False,               # Return a failed result object...
@@ -253,15 +256,32 @@ def score_openmm(ligand_id: str, pose_sdf: Path, receptor_pdb: Path, cfg) -> Phy
     # Start the main physics execution block.
     try:                                                                                 
         oc = cfg.get("physics", "openmm", default={})                                    # Extract the 'openmm' specific settings dictionary from the main config.
-        # Load the ligand from the SDF file using OpenFF's Molecule class to understand its topology.
-        ligand = Molecule.from_file(str(pose_sdf))                                       # Parse the ligand SDF using OpenFF to understand its chemical topology.
-        
-        # Load the static KRAS protein target PDB into OpenMM's application layer.
-        receptor = app.PDBFile(str(receptor_pdb))                                        
+
+        # Ligand: Since GAFF2/OpenFF cannot parameterise a heavy-atom-only ligand, load the
+        # AI-predicted pose SDF (with any hydrogens that might be present), and because 
+        # DiffDock's SDFs are usually heavy-atom only, add the missing H onto the existing 3D coords.
+        rd_lig = next(iter(Chem.SDMolSupplier(str(pose_sdf), removeHs=False)), None)     # Read the pose with RDKit, keeping any hydrogens already present.
+        if rd_lig is None:                                                               # Guard: the SDF was empty or unreadable.
+            return PhysicsResult(ligand_id, str(pose_sdf), "openmm", ok=False,           # Fail this ligand cleanly...
+                                 note="unreadable_pose")                                 # ...so the batch continues.
+        rd_lig = Chem.AddHs(rd_lig, addCoords=True)                                      # Add any missing hydrogens, placing them on the existing heavy-atom geometry.
+        ligand = Molecule.from_rdkit(rd_lig, allow_undefined_stereo=True)                # Build the OpenFF Molecule (tolerate undefined stereo from crystal-derived poses).
+
+        # Receptor: the cleaned PDB is heavy-atom only. Amber14 templates require
+        # explicit hydrogens, so a PDBFixer is used to complete partial residues and
+        # protonate the protein. We deliberately do NOT model whole missing loops. 
+        fixer = PDBFixer(filename=str(receptor_pdb))                                     # Load the heavy-atom receptor into PDBFixer.
+        fixer.findMissingResidues()                                                      # Detect gaps (whole missing residues/loops)...
+        fixer.missingResidues = {}                                                       # ...but skip modelling them (avoids inventing loop coordinates near/away from the pocket).
+        fixer.findMissingAtoms()                                                         # Detect missing heavy atoms within existing residues (e.g. truncated side chains).
+        fixer.addMissingAtoms()                                                          # Rebuild those missing heavy atoms.
+        fixer.addMissingHydrogens(7.0)                                                   # Add hydrogens at physiological pH 7.0 (sets HIS/CYS protonation states).
+        rec_top, rec_pos = fixer.topology, fixer.positions                               # Protonated, completed protein topology + coordinates.
+
         # Define basic force field rules (physical simulation constraints).
         ff_kwargs = dict(constraints=app.HBonds, rigidWater=True,                        # Constrain hydrogen bonds, keep water rigid...
                          removeCMMotion=False, hydrogenMass=1.5 * unit.amu)              # ...do not remove center-of-mass motion, and repartition hydrogen mass for stability.
-        
+
         # SystemGenerator takes the abstract topology (the map of atoms) and applies the
         # Amber14 and GAFF2 parameters, converting the static map into an openmm.System
         sysgen = SystemGenerator(                                                        
@@ -272,7 +292,8 @@ def score_openmm(ligand_id: str, pose_sdf: Path, receptor_pdb: Path, cfg) -> Phy
 
         # The drug is mathematically injected into the exact 3D coordinate space of the protein, 
         # matching the precise location the AI (DiffDock) predicted it would bind.
-        modeller = app.Modeller(receptor.topology, receptor.positions)                   # Create a Modeller object starting with just the protein.
+        modeller = app.Modeller(rec_top, rec_pos)                                        # Create a Modeller object starting with the protonated protein.
+        rec_n = modeller.topology.getNumAtoms()                                          # Protonated receptor atom count; the ligand block is appended AFTER this.
         lig_top = ligand.to_topology().to_openmm()                                       # Convert the OpenFF ligand topology into an OpenMM-compatible topology.
         lig_pos = ligand.conformers[0].to_openmm()                                       # Convert the ligand's 3D coordinates into OpenMM format.
         modeller.add(lig_top, lig_pos)                                                   # Merge the ligand into the protein's Modeller object to create the full complex.
@@ -321,12 +342,12 @@ def score_openmm(ligand_id: str, pose_sdf: Path, receptor_pdb: Path, cfg) -> Phy
         try:                                                                             # Isolate the decomposition so its failure can't kill drift above.
             # Extract the minimized coordinates of the whole complex, and the receptor atom count.
             post_q = sim.context.getState(getPositions=True).getPositions()              # Minimized coordinates of the whole complex.
-            rec_n = receptor.topology.getNumAtoms()                                      # Receptor atom count; the ligand block immediately follows it.
+            rec_n = rec_top.getNumAtoms()                                                # Protonated-receptor atom count; the ligand block immediately follows it.
             # Compute the single-point potential energy of the complex, the receptor alone, 
             # and the ligand alone, all at the minimized geometry with no restraints.
             e_cpx = _single_point_energy(sysgen.create_system(modeller.topology),        # E(complex): fresh restraint-free system at the minimized geometry.
                                          post_q, openmm, unit, platform)                 # (same coordinates, no positional restraint force).
-            e_rec = _single_point_energy(sysgen.create_system(receptor.topology),        # E(receptor alone) at those same receptor coordinates.
+            e_rec = _single_point_energy(sysgen.create_system(rec_top),                  # E(receptor alone) at those same receptor coordinates.
                                          post_q[:rec_n], openmm, unit, platform)         # Slice the receptor block.
             e_lig = _single_point_energy(sysgen.create_system(lig_top),                  # E(ligand alone) at those same ligand coordinates.
                                          post_q[rec_n:], openmm, unit, platform)         # Slice the ligand block.

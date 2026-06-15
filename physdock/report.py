@@ -75,6 +75,8 @@ def _bar_rmsd(df: pd.DataFrame, out_png: Path, thr: float):
         >>> _bar_rmsd(pose_df, Path("results/figures/rmsd.png"), 2.0)
         Path('results/figures/rmsd.png')
     """
+    if df is None or df.empty or "pose_rmsd" not in df.columns:                          # Guard: no pose evaluation at all (e.g. DiffDock skipped, so pose_eval is empty)...
+        return None                                                                      # ...skip the chart gracefully instead of raising a KeyError.
     sub = df.dropna(subset=["pose_rmsd"])                                                # Filter out any rows where the RMSD calculation failed or was missing.
     if sub.empty:                                                                        # Guard clause: Check if there is actually any valid data left to plot.
         return None                                                                      # Return None gracefully to skip chart generation without crashing the pipeline.
@@ -184,6 +186,14 @@ def build(results_dir, merged: pd.DataFrame, pose_eval: pd.DataFrame,
         lines += [f"![pose rmsd](figures/{rmsd_png.name})", ""]                          # Inject the Markdown image syntax linking to the relative file path.
 
     lines += ["## Affinity ranking (function)"]                                          # Markdown H2 section for Functional Validation summary.
+    lines += [                                                                           # Add a one-line sign convention so a negative rho is not misread as failure.
+        "_Sign convention: `affinity_pred_value` (Boltz, log10 IC50 µM) and "             # Boltz affinity is lower-is-stronger...
+        "`interaction_energy_kj` are **lower = stronger binder**, while pChEMBL is "      # ...as is the interaction-energy proxy...
+        "**higher = stronger**. So for these predictors a **negative** Spearman ρ "      # ...whereas pChEMBL is higher-is-stronger...
+        "indicates correct ranking. (`ligand_strain_kcal` is a pose-quality proxy, not " # ...therefore a good model yields negative ρ. Strain is not an affinity metric...
+        "an affinity term — no sign is expected.)_",                                      # ...so no ρ sign is expected for it.
+        "",                                                                              # Blank line.
+    ]
     for s in corr_stats:                                                                 # Iterate through the calculated correlation dictionaries again.
         if s.get("usable"):                                                              # If the statistic is statistically valid...
             lines.append(f"- `{s['pred_col']}`: Spearman ρ = **{s['rho']}** "            # ...format a bullet point showing the prediction metric and the Rho score...

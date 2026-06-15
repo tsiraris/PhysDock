@@ -75,7 +75,7 @@ def set_seed(seed: int = 42) -> None:
     """
     random.seed(seed)                                                                # Lock the built-in Python standard library random number generator
     np.random.seed(seed)                                                             # Lock the NumPy mathematical random number generator (crucial for arrays)
-    os.environ["PYTHONHASHSEED"] = str(seed)                                         # Lock Python's dictionary/set hashing algorithm to prevent random ordering
+    os.environ["PYTHONHASHSEED"] = str(seed)                                         # Fix hash-seed for any child processes spawned later (does not change the already-running interpreter)
     try:  # torch is only present once the heavy models are installed                # Open a try-block because PyTorch might not be installed in the lightweight CPU env
         import torch                                                                 # Attempt to import PyTorch dynamically
         torch.manual_seed(seed)                                                      # Lock PyTorch's CPU random number generator

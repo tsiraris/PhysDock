@@ -242,3 +242,32 @@ def evaluate_ligand(ligand_id: str, smiles: str) -> ChemVerdict:
         pains_alerts=pains, in_windows=in_windows, passes=passes,      # Passes the boolean flags and alert counts
         reason=";".join(reasons) if reasons else "ok",                 # Joins all warnings with a semicolon, or outputs "ok" if the list is empty
     )
+
+def passing_ligand_ids(gate_csv: str = "results/chem/chem_gate.csv") -> Optional[set]:
+    """
+    Reads the Stage-02 chem-gate ledger and returns the set of ligand IDs that PASSED.
+
+    This is what makes the cheminformatics gate a real filter rather than an advisory
+    artifact: Stages 03/04 call this and skip any ligand whose `passes` flag is False
+    (i.e. chemically invalid / unparseable). PAINS, out-of-window, and high-SA molecules
+    are deliberately kept (passes=True) because real covalent KRAS binders trip those
+    soft alerts; they are recorded in `reason` for prioritisation, not dropped.
+
+    Args:
+        gate_csv (str): Path to the chem-gate CSV written by 02_chem_gate.py.
+
+    Returns:
+        Optional[set]: A set of passing ligand_id strings, or None if the gate has not
+                       been run yet (in which case callers should not filter).
+    """
+    import pandas as pd                                                 # Local import keeps module load lightweight.
+    from pathlib import Path                                            # Local import for the existence check.
+
+    p = Path(gate_csv)                                                  # Resolve the ledger path.
+    if not p.exists():                                                  # Gate never ran (e.g. stage 03 invoked standalone)...
+        return None                                                     # ...signal "do not filter" so the pipeline still works.
+    df = pd.read_csv(p)                                                 # Load the per-ligand verdicts.
+    if "passes" not in df.columns or "ligand_id" not in df.columns:     # Malformed/empty ledger...
+        return None                                                     # ...fail open rather than dropping everything.
+    mask = df["passes"].astype(str).str.strip().str.lower().isin(["true", "1"])  # Robustly coerce the bool column (handles "True"/True/1).
+    return set(df.loc[mask, "ligand_id"].astype(str))                   # Return the IDs cleared for the GPU stages.

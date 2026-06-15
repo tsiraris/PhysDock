@@ -38,7 +38,9 @@ echo "== 00 setup check =="          ; python scripts/00_setup_check.py
 echo "== 01 prepare target =="       ; python scripts/01_prepare_target.py --config "$CFG"
 
 # Stage 02: Cheminformatics Filter (CPU)
-# Blocks mathematically invalid or un-synthesizable drugs from entering the expensive GPU queue.
+# Hard-fails chemically invalid molecules (bad valence / unparseable) before the GPU queue;
+# flags PAINS / out-of-window / high-SA as advisory (kept, since covalent KRAS binders trip these).
+# Stages 03/04 read this ledger and skip any ligand that did not pass.
 echo "== 02 chem gate =="            ; python scripts/02_chem_gate.py --config "$CFG"
 
 # Stage 03: Generative Diffusion Docking (GPU)

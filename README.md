@@ -13,7 +13,7 @@ Designed for efficiency and falsifiability, PhysDock answers two critical drug d
 1. **Geometry ("Where does it bind?"):** Utilizing diffusion models to predict structural poses.
 2. **Function ("How well does it bind?"):** Utilizing physics-based simulations and neural-network affinity heads to rank candidate efficacy.
 
-The pipeline is engineered with strict MLOps principles: it filters un-synthesizable chemistry *before* GPU execution, triangulates predictions across independent AI architectures, and validates all outputs against crystallographic (RMSD) and experimental (pChEMBL) ground truths.
+The pipeline is engineered with strict MLOps principles: it hard-fails chemically invalid chemistry (and flags PAINS/property/synthetic-accessibility advisories) *before* GPU execution, triangulates predictions across independent AI architectures, and validates all outputs against crystallographic (RMSD) and experimental (pChEMBL) ground truths.
 
 **Hardware Profile:** Engineered to execute end-to-end on a single 24 GB GPU (e.g., AWS A10G), with a decoupled CPU-bound analytical core.
 
@@ -33,7 +33,7 @@ PhysDock orchestrates a multi-tier approach to molecular prediction, explicitly 
 | --- | --- | --- | --- |
 | **00** | `00_setup_check.py` | — | **Pre-Flight:** Validates environment dependencies and core CPU logic. |
 | **01** | `01_prepare_target.py` | `receptor.py` | **Data Prep:** Cleans receptor, extracts crystal reference poses & SMILES. |
-| **02** | `02_chem_gate.py` | `chem.py` | **Triage:** Filters invalid, un-synthesizable, or PAINS-alert ligands. |
+| **02** | `02_chem_gate.py` | `chem.py` | **Triage:** Hard-fails invalid valence/chemistry; flags PAINS/SA/property advisories. |
 | **03** | `03_run_diffdock.py` | `docking_diffdock.py` | **Generative AI:** Predicts binding poses via diffusion sampling. |
 | **04** | `04_run_boltz.py` | `cofold_boltz.py` | **Co-Folding:** Predicts induced-fit complex and binding affinity. |
 | **05** | `05_physics_rescore.py` | `physics_openmm.py` | **Physics:** Evaluates thermodynamic stability and pose drift. |

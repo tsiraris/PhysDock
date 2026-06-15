@@ -72,7 +72,7 @@ def main(cfg_path):
     # Build a rapid lookup dictionary mapping ligand IDs to their ground-truth crystal structures (SDF paths)
     refs = {lid: i.get("ref_sdf") for lid, i in prep["ligands"].items()}                 
     # Attempt to load the raw DiffDock poses (fallback to an empty DataFrame with the expected columns), 
-    # sort them by AI confidence, and keep only the top-1 ranked pose (AI's most confident) per drug. 
+    # sort them by model's confidence score (lowest 'rank'), and keep only the top-1 ranked pose per drug. 
     poses = _read("results/diffdock/poses.csv")                                          # Attempt to load the raw generative poses from Tier A
     top = (poses.sort_values(["ligand_id", "rank"]).groupby("ligand_id").head(1)         # Sort the poses by AI confidence and slice strictly the #1 rank pose per drug...
            if not poses.empty else pd.DataFrame(columns=["ligand_id", "pose_sdf"]))      # ...fallback to an empty scaffold if DiffDock failed or was skipped
@@ -83,17 +83,30 @@ def main(cfg_path):
     # and slice the best pose per drug based on internal strain energy (lowest/kcal is best).
     boltz = _read("results/boltz/boltz.csv")                                             # Attempt to load the affinity and joint-folding metrics from Tier B
     physics = _read("results/physics/physics.csv")                                       # Attempt to load the thermodynamic relaxation metrics from the OpenMM proxy
-    phys_best = (physics.sort_values("ligand_strain_kcal")                               # Sort the physics results by internal structural strain (lowest/best first)...
-                 .groupby("ligand_id").head(1)) if not physics.empty else pd.DataFrame() # ...and slice the single most thermodynamically stable pose per drug
+    ens = _read("results/ensemble/ensemble.csv")                                         # Attempt to load the conformational-landscape metrics from Stage 06
+    # Pick the single best physics pose per ligand using whichever score the chosen mode populates:
+    # lightweight -> ligand_strain_kcal (lower = better);  openmm -> interaction_energy_kj (lower/more-negative = better).
+    phys_mode = cfg.get("physics", "mode", default="lightweight")                        # Read which physics mode produced this run's physics.csv
+    sort_key = "interaction_energy_kj" if phys_mode == "openmm" else "ligand_strain_kcal" # Choose the populated, meaningful ranking column for that mode
+    # Only sort when the chosen score actually has values; If the score column is missing/empty, fall back to
+    # first row per ligand so the merge still works. If no physics data exists at all, create an empty DataFrame.
+    if not physics.empty and sort_key in physics.columns and physics[sort_key].notna().any(): # Only sort when the chosen score actually has values
+        phys_best = physics.sort_values(sort_key).groupby("ligand_id").head(1)           # Lowest score first => best pose per ligand
+    elif not physics.empty:                                                              # Score column missing/empty (e.g. mode mismatch)...
+        phys_best = physics.groupby("ligand_id").head(1)                                 # ...fall back to first row per ligand so the merge still works
+    else:                                                                                # No physics at all (stage skipped)...
+        phys_best = pd.DataFrame()                                                       # ...empty frame; the merge loop skips it
     # Initialize the master merged ledger with the foundational metadata DataFrame, then iteratively merge in specific columns from
-    # the pose evaluation, Boltz-2, and physics metrics dataframes (only if they were successfully generated) using left joins on 'ligand_id'.
+    # the pose evaluation, Boltz-2, physics, and ensemble dataframes (only if they were successfully generated) using left joins on 'ligand_id'.
     merged = base                                                                        # Initialize the master merged ledger with the foundational metadata DataFrame
     for extra, cols in [(pose_eval, ["ligand_id", "pose_rmsd", "pose_success"]),         # Define a list of tuples: (DataFrame to merge, [List of specific columns to extract])
                         (boltz, [c for c in ["ligand_id", "iptm", "affinity_pred_value", # Dynamically extract Boltz columns only if they successfully generated
                                              "affinity_prob_binary"] if c in boltz.columns]),
                         (phys_best, [c for c in ["ligand_id", "ligand_strain_kcal",      # Dynamically extract Physics columns only if they successfully generated
                                                  "interaction_energy_kj", "pose_drift_rmsd"]
-                                     if c in phys_best.columns])]:
+                                     if c in phys_best.columns]),
+                        (ens, [c for c in ["ligand_id", "n_poses", "pose_spread_rmsd",   # Dynamically extract Ensemble (MD-surrogate) columns only if they exist
+                                           "n_clusters"] if c in ens.columns])]:
         if not extra.empty:                                                              # Check if the specific microservice actually produced data
             merged = merged.merge(extra[cols], on="ligand_id", how="left")               # Perform a SQL-style LEFT JOIN to attach the metrics to the master ledger via the 'ligand_id' key
 

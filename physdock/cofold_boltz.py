@@ -215,3 +215,78 @@ def _find_affinity(folder: Path) -> Optional[dict]:
         except Exception:  # noqa: BLE001                                   # Catch any error (BLE001 suppresses a linter warning about broad exceptions)
             return None                                                     # Return None if the file was unreadable or the JSON was malformed
     return None                                                             # Return None if the loop completes without finding a file matching the pattern
+
+def reduce_best_per_ligand(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Collapse Boltz's multiple per-diffusion-sample rows down to one best row per ligand.
+
+    Boltz writes one confidence_*.json per diffusion sample (model_0, model_1, ...), so
+    parse_results yields several rows sharing the same ligand_id (and the same, per-ligand
+    affinity value). If left un-reduced, the left-merge in stage 07 fans every base ligand
+    row out to N rows, corrupting the per-ligand report and the affinity correlation.
+
+    Keep the most confident sample per ligand (highest confidence_score, falling back to
+    highest ipTM), which also defines the single ipTM that the downstream gate evaluates.
+
+    Args:
+        df (pd.DataFrame): Raw Boltz results (potentially many rows per ligand_id).
+
+    Returns:
+        pd.DataFrame: Exactly one row per ligand_id (unchanged if already one-per-ligand).
+        
+    Example:
+        >>> df = pd.DataFrame({'ligand_id': ['L1', 'L1', 'L2'], 'confidence_score': [0.8, 0.9, 0.7]})
+        >>> reduce_best_per_ligand(df)
+          ligand_id  confidence_score
+        0        L1               0.9
+        1        L2               0.7
+    """
+    if df is None or df.empty or "ligand_id" not in df.columns:        # Nothing to collapse.
+        return df if df is not None else pd.DataFrame()                # Pass through safely.
+    key = None                                                         # Decide which column ranks "best".
+    for cand in ("confidence_score", "iptm", "ptm"):                   # Prefer the aggregate score, then interface, then global.
+        if cand in df.columns and df[cand].notna().any():              # Use the first available, populated metric.
+            key = cand                                                 # Lock the ranking key.
+            break                                                      # Stop at the first usable metric.
+    if key is None:                                                    # No confidence columns at all...
+        return df.drop_duplicates("ligand_id").reset_index(drop=True)  # ...just de-duplicate by ligand_id.
+    return (df.sort_values(key, ascending=False)                       # Sort so the most confident sample is first...
+              .groupby("ligand_id", as_index=False)                    # ...group by ligand...
+              .head(1)                                                 # ...and keep that single best row...
+              .reset_index(drop=True))                                 # ...with a clean index.
+
+
+def apply_iptm_gate(df: pd.DataFrame, cfg) -> pd.DataFrame:
+    """
+    Apply the `ensemble.confidence_gate.boltz_min_iptm` threshold to co-folded complexes.
+
+    This makes the ipTM half of the configured confidence gate a real, wired control:
+    complexes whose interface confidence (ipTM) falls below the threshold are dropped
+    before they reach affinity ranking. As a safety valve, if the threshold would remove
+    EVERY ligand (e.g. a mis-set threshold), nothing is dropped and a warning is logged,
+    so an over-strict value can never silently empty the affinity correlation.
+
+    Args:
+        df (pd.DataFrame): One-row-per-ligand Boltz results (call after reduce_best_per_ligand).
+        cfg: The pipeline Config object.
+
+    Returns:
+        pd.DataFrame: The gated results.
+    
+    Example:
+        >>> # Assuming cfg.get("ensemble", "confidence_gate", "boltz_min_iptm", default=None) returns 0.8
+        >>> df = pd.DataFrame({'ligand_id': ['L1', 'L2'], 'iptm': [0.9, 0.7]})
+        >>> apply_iptm_gate(df, cfg)
+          ligand_id  iptm
+        0        L1   0.9
+    """
+    thr = cfg.get("ensemble", "confidence_gate", "boltz_min_iptm", default=None)   # Read the configured ipTM threshold (None => gate disabled).
+    if thr is None or df is None or df.empty or "iptm" not in df.columns:          # No threshold / no data / no ipTM column...
+        return df if df is not None else pd.DataFrame()                            # ...nothing to gate.
+    thr = float(thr)                                                               # Coerce the threshold to float.
+    kept = df[df["iptm"].fillna(-1.0) >= thr].copy()                               # Keep complexes at/above the threshold (missing ipTM treated as failing).
+    if kept.empty:                                                                 # Over-strict threshold would drop everything...
+        log.warning("ipTM gate >= %.2f would drop all %d complexes; keeping them ungated.", thr, len(df))  # ...warn loudly...
+        return df                                                                  # ...and fail open so the affinity stat isn't silently emptied.
+    log.info("ipTM gate >= %.2f: kept %d/%d complexes", thr, len(kept), len(df))   # Report the gate outcome for transparency.
+    return kept                                                                    # Return the gated table.

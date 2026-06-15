@@ -26,6 +26,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))                             # Dynamically add the parent directory to the Python path to allow local package imports
 from physdock import cofold_boltz as bz                                                  # Import the custom Boltz-2 wrapper module, aliased as 'bz' for brevity
+from physdock import chem                                                                # Import the chem module to consult the Stage-02 gate (drop chemically invalid ligands)
 from physdock.config import load_config                                                  # Import the configuration loader to parse the YAML settings
 from physdock.utils import get_logger, load_json, ensure_dir, set_seed                   # Import utilities for logging, JSON parsing, directory management, and deterministic randomness
 
@@ -49,14 +50,18 @@ def main(cfg_path, max_ligands):
     pa = cfg.get("boltz", "predict_affinity", default=True)                              # Retrieve the boolean flag dictating whether Boltz should calculate binding affinity
 
     # Extract a list of (ligand_id, data) tuples, keeping only those with valid SMILES 
-    # strings and apply the optional max_ligands budget cap.
-    items = [(lid, info) for lid, info in prep["ligands"].items() if info.get("smiles")] # Extract a list of (ligand_id, data) tuples, filtering out any ligands missing a SMILES string
+    # strings that passed the Stage-02 chem gate, and apply the optional max_ligands cap.
+    passing = chem.passing_ligand_ids()                                                  # Read the Stage-02 chem-gate ledger (None => gate not run, so don't filter)
+    if passing is not None:                                                              # Only filter when the gate has actually produced a ledger
+        log.info("Chem gate: %d ligand(s) cleared for co-folding", len(passing))         # Report how many ligands the gate cleared for this GPU stage
+    items = [(lid, info) for lid, info in prep["ligands"].items()                        # Build the (ligand_id, data) work list...
+             if info.get("smiles") and (passing is None or lid in passing)]              # ...keeping only ligands with SMILES that also cleared the chem gate (if it ran)
     if max_ligands:                                                                      # Check if the user passed a command-line argument to limit the number of runs (budget cap)
         items = items[:max_ligands]                                                      # Slice the list to keep only the first 'max_ligands' elements
         log.info("Budget cap: running Boltz on first %d ligands", max_ligands)           # Log a warning that the run is being truncated to protect the AWS budget
 
-    # Iterate sequentially over the filtered list of ligands, generate appropriate input  YAMLs for Boltz CLI
-    # and run Boltz for each, parse the generated .json results into a master DataFrame and write it to a CSV.
+    # Iterate sequentially over the filtered list of ligands, generate appropriate input 
+    # YAMLs for Boltz CLI, and run Boltz for each ligand.
     frames = []                                                                          # Initialize an empty list to accumulate pandas DataFrames containing the results
     for lid, info in items:                                                              # Iterate sequentially over every approved ligand in the filtered list
         yml = bz.write_input_yaml(lid, seq, info["smiles"],                              # Call the wrapper to generate the specific input YAML file required by the Boltz CLI
@@ -66,7 +71,13 @@ def main(cfg_path, max_ligands):
         except Exception as e:  # noqa: BLE001                                           # Catch any inference exceptions (e.g., CUDA OutOfMemory or invalid chemistry)
             log.error("Boltz failed for %s: %s", lid, e); continue                       # Log the exact failure and immediately continue to the next drug in the loop
         frames.append(bz.parse_results(out_dir / "preds" / lid))                         # If successful, parse the generated JSON output files into a DataFrame and append it to the list
+    # Parse all the generated .json (Boltz output) results into a master DataFrame
     df = pd.concat([f for f in frames if not f.empty], ignore_index=True) if frames else pd.DataFrame() # Concatenate all individual ligand DataFrames into one master DataFrame, or create an empty one if all failed
+    # Collapse the per-diffusion-sample rows to one best row per ligand (highest confidence_score 
+    # sample first, highest ipTM second). This prevents a 1-to-many merge blow-up in stage 07.
+    df = bz.reduce_best_per_ligand(df)                                                   
+    # Also apply the boltz_min_iptm confidence gate (drops low-interface-confidence complexes; never empties the table)
+    df = bz.apply_iptm_gate(df, cfg)                                                     
     df.to_csv(out_dir / "boltz.csv", index=False)                                        # Write the master DataFrame to disk as a CSV file, dropping the pandas index column
     log.info("Boltz results -> %s (%d rows)", out_dir / "boltz.csv", len(df))            # Log the successful completion of the stage and the total number of processed predictions
 

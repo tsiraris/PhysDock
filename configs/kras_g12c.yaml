@@ -25,7 +25,7 @@ ligands:
 
 # Docking search box (Angstrom), built around the reference ligand centroid.
 box:
-  padding: 8.0                    # Sets the size of the "search box" for the AI, taking the center of the pocket and adds 8.0 Angstroms in every direction. The AI is only allowed to dock the drug inside this specific cubic space.
+  padding: 8.0                    # Half-width (Angstrom) of a pocket box built around the reference-ligand centroid. Recorded in target_prep.json for pocket-focused analysis and any future box-based docking; NOTE: DiffDock-L performs blind docking and is NOT constrained by this box in the current pipeline.
 
 # Tier A — How to run the diffusion docking model.
 diffdock:
