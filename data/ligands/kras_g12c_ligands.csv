@@ -12,7 +12,7 @@
 #   role         : free text (covalent inhibitor, fragment, tool compound...)
 #   verify       : set to 1 only after you've confirmed the pdb_id/resname pairing.
 ligand_id,pdb_id,ligand_resname,pchembl,role,verify
-sotorasib,6OIM,6O7,,covalent_clinical,0
-adagrasib,6UT0,LM6,,covalent_clinical,0
-ars1620,5V9U,8KX,,covalent_tool,0
-ars853,5F2E,5V8,,covalent_tool,0
+sotorasib,6OIM,MOV,,covalent_clinical,1
+adagrasib,6UT0,M1X,,covalent_clinical,1
+ars1620,5V9U,91S,,covalent_tool,1
+ars853,5F2E,5UT,,covalent_tool,1

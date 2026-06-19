@@ -34,12 +34,12 @@ diffdock:
   # as a template you point at the install. {protein},{ligand_csv},{out} filled in.
   repo_dir: ${PHYSDOCK_DIFFDOCK_DIR}        # set this env var to your clone
   inference_cmd: >-                         # Exact command-line arguments the pipeline will use to execute the DiffDock software.
-    python -m inference
+    conda run -n diffdock python -m inference
     --protein_ligand_csv {ligand_csv}
     --out_dir {out}
     --inference_steps 20
     --samples_per_complex 16
-    --batch_size 8
+    --batch_size 1
     --actual_steps 18
     --no_final_step_noise
   samples_per_complex: 16                   # How many poses to generate per ligand, simulating a conformational ensemble.
@@ -73,7 +73,7 @@ physics:
 ensemble:
   rmsd_cluster_threshold: 2.0      # If two AI-generated poses are within this Angstrom distance of each other, they are considered essentially identical (same "cluster").
   confidence_gate:                 # Only keep poses with a confidence score (from both DiffDock and Boltz-2) >= this threshold
-    diffdock_min_confidence: -1.5  # DiffDock confidence (logit-like); keep >= this
+    diffdock_min_confidence: -3    # DiffDock confidence (logit-like); keep >= this ; −1.5 default is fine for typical targets but silently drops large/covalent ligands.
     boltz_min_iptm: 0.5            # Interface pTM gate for co-folded complexes (how confident the AI is about the structure); keep >= this
 
 # Evaluation.

@@ -42,6 +42,44 @@ PhysDock orchestrates a multi-tier approach to molecular prediction, explicitly 
 
 ---
 
+## 📊 Results — KRAS G12C Case Study
+
+The full pipeline was executed end-to-end on real data for **four covalent KRAS G12C inhibitors** — sotorasib, adagrasib, ARS-1620, ARS-853 — using their deposited co-crystal structures (PDB **6OIM, 6UT0, 5V9U, 5F2E**) as ground truth. All three engines (DiffDock-L, Boltz-2, OpenMM/GAFF2) ran on a single 24 GB A10G GPU.
+
+### Pose accuracy (primary result)
+
+Symmetry-aware heavy-atom RMSD between the top-ranked generative pose and the crystallographic pose, computed with `spyrmsd` for all four ligands:
+
+| Ligand | RMSD (Å) | Outcome |
+| --- | ---: | --- |
+| sotorasib | **2.72** | near-native, correct pocket |
+| ARS-853 | **3.14** | near-native, correct pocket |
+| adagrasib | 6.65 | misplaced (large, flexible) |
+| ARS-1620 | 8.18 | misplaced |
+
+![Pose RMSD vs crystal](results/report/figures/pose_rmsd.png)
+
+DiffDock-L recovered a **near-native binding mode (≤ 3.2 Å)** for the two more rigid inhibitors and placed the two larger, more flexible ligands in a plausible but incorrect sub-pocket orientation. The structural overlays below show the crystal pose (grey) against the predicted pose (teal) for the two near-native cases:
+
+| sotorasib (2.72 Å) | ARS-853 (3.14 Å) |
+| --- | --- |
+| ![sotorasib overlay](results/report/figures/overlays/overlay_sotorasib.png) | ![ARS-853 overlay](results/report/figures/overlays/overlay_ars853.png) |
+
+This split is an **expected and reportable limitation, not a failure**: DiffDock-L docks *non-covalently* and applies no constraint tethering the electrophilic acrylamide warhead to **Cys12**, the residue these inhibitors covalently modify. The result is presented as a faithful characterization of the method's **applicability domain** — it reproduces rigid inhibitors well and degrades predictably on larger flexible covalent binders. (Covalent modeling is on the roadmap below.)
+
+### Supporting signals
+
+- **Co-folding (Boltz-2):** high interface confidence for all four complexes (ipTM **0.98**).
+- **Predicted affinity:** reported but **statistically underpowered** (n = 4, experimental labels unfilled); no Spearman ρ is claimed. Ranking the clinical drug sotorasib weakest is a transparent miss, recorded rather than omitted.
+- **Physics plausibility (OpenMM):** all four poses gave sane interaction-energy proxies (−263 to −440 kJ/mol) and small post-minimization drift (0.8–1.7 Å) — the generative poses are stable under a molecular-mechanics force field. Reported as a relaxation/plausibility proxy, **not** a binding free energy.
+- **Conformational consistency:** ensemble analysis found a single dominant binding-mode cluster per ligand (pose spread 1.3–2.0 Å) — DiffDock-L was internally self-consistent.
+
+**Not claimed:** no wet-lab validation (all signals *in silico*); the OpenMM term is a proxy, not MM-GBSA/FEP free energy; the affinity correlation is underpowered until experimental labels are added; reported confidences are model self-estimates.
+
+> A full account of every issue surfaced during the first real run — wrong manifest resnames, crystal-coordinate bond-order perception, multi-copy reference SDFs, the DiffDock torch-2 broadcast crash, Boltz's `weights_only` / cuEquivariance failures, and the confidence-gate tuning — and how each was diagnosed and fixed at the source, is documented in the project Summary (`Summary and reminders of PhysDock project.docx`, section *F · Issues/Bugs and fixes*).
+
+---
+
 ## 📐 Core Design Philosophy
 
 * **Generative Triangulation:** By utilizing two distinct generative engines (DiffDock and Boltz-2), the pipeline actively seeks consensus. Agreement across models, physics, and ground truth yields a high-confidence hypothesis. Disagreement is explicitly flagged for human review.
@@ -53,32 +91,46 @@ PhysDock orchestrates a multi-tier approach to molecular prediction, explicitly 
 
 ## 🛠️ Quickstart & Usage
 
-The pipeline is decoupled. The heavy ML models and physics engines are optional installations, allowing the analytical core (RDKit, Pandas, Biopython) to run on any local CPU machine for rapid data prep and reporting.
+The pipeline is decoupled. The analytical core (RDKit, Pandas, Biopython) runs on any local CPU machine for rapid data prep and reporting; the heavy ML/physics engines are added on a GPU box. Because DiffDock-L and the PhysDock/Boltz stack require **mutually incompatible** PyTorch builds, they live in **two separate conda environments**. Both are captured exactly in `env_physdock.yml` and `env_diffdock.yml`.
 
 ```bash
-# 1. Install the CPU-bound analytical core
+# --- analytical core (CPU, any machine) ---
 pip install -e .
 python scripts/00_setup_check.py          # -> SMOKE TEST PASSED
 
-# 2. Extract targets & run cheminformatics triage (CPU)
-python scripts/01_prepare_target.py
-python scripts/02_chem_gate.py
+# --- main environment (physics + Boltz), reproducible from the export ---
+conda env create -f env_physdock.yml      # creates 'physdock'
+conda activate physdock
 
-# 3. Execute Generative Inference (Requires GPU & Heavy Dependencies)
-# Note: clone DiffDock-L into its own env and `pip install boltz` (pin the CUDA
-#       build to your AMI driver); install physics extras with `pip install ".[physics,rmsd]"`.
-export PHYSDOCK_DIFFDOCK_DIR=/path/to/DiffDock
-python scripts/03_run_diffdock.py
-python scripts/04_run_boltz.py --max-ligands 4   # Implements AWS budget capping
-
-# 4. Thermodynamic Relaxation & Statistical Validation (CPU/GPU)
-python scripts/05_physics_rescore.py --top-per-ligand 3
-python scripts/06_ensemble_analysis.py
-python scripts/07_evaluate_and_report.py
-
+# --- DiffDock-L in its own environment (its torch stack conflicts with the above) ---
+conda env create -f env_diffdock.yml      # creates 'diffdock'
+git clone https://github.com/gcorso/DiffDock ~/DiffDock
+export PHYSDOCK_DIFFDOCK_DIR=~/DiffDock
 ```
 
-*Outputs are serialized to `results/report/report.md` alongside unified CSV ledgers.*
+**Two environment requirements learned from the first real run** (see Summary §F):
+
+- **Boltz on PyTorch ≥ 2.6** needs `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1` in the `physdock` env (the official checkpoints pickle OmegaConf objects the safe-unpickler rejects). Set it once, e.g. via a `sitecustomize.py` in the env.
+- The config disables the cuEquivariance triangle kernels (`boltz.no_kernels: true`) and pins DiffDock to `--batch_size 1`; both avoid hard crashes on current CUDA/torch builds. Leave them as shipped unless you have pinned the exact legacy stack.
+
+```bash
+# --- run the pipeline ---
+# CPU stages
+python scripts/01_prepare_target.py --config configs/kras_g12c.yaml
+python scripts/02_chem_gate.py       --config configs/kras_g12c.yaml
+# GPU stages
+python scripts/03_run_diffdock.py    --config configs/kras_g12c.yaml
+python scripts/04_run_boltz.py       --config configs/kras_g12c.yaml --max-ligands 4
+# CPU / mixed
+python scripts/05_physics_rescore.py --config configs/kras_g12c.yaml --top-per-ligand 3
+python scripts/06_ensemble_analysis.py --config configs/kras_g12c.yaml
+python scripts/07_evaluate_and_report.py --config configs/kras_g12c.yaml
+
+# or end-to-end:
+bash scripts/run_all.sh configs/kras_g12c.yaml
+```
+
+*Outputs are serialized to `results/report/report.md` alongside unified CSV ledgers and figures.*
 
 ---
 
@@ -115,6 +167,9 @@ PhysDock/
 │   ├── 00_setup_check.py -> 07_evaluate_and_report.py
 │   ├── run_all.sh                      # CI/CD end-to-end execution script
 │   └── fetch_chembl_affinities.py      # Auxiliary biological API scraper
+├── env_physdock.yml                    # Reproducible conda env (physics + Boltz)
+├── env_diffdock.yml                    # Reproducible conda env (DiffDock-L)
+├── results/report/figures/             # pose_rmsd.png + overlays/ (crystal vs predicted)
 ├── notebooks/01_quickstart.ipynb       # Interactive tutorial
 ├── pyproject.toml                      # Modern PEP 517/518 build configuration
 ├── README.md                           # Project documentation

@@ -105,27 +105,37 @@ def _extract_ligand(pdb_path: Path, resname: str, out_sdf: Path) -> tuple[Option
         log.warning("RDKit could not parse ligand block for %s", resname)       # Log a warning that the geometric data is corrupted or unreadable
         return None, None, None                                                 # Abort extraction and return nulls
 
+    # A deposited HETATM group can contain several disconnected copies of the ligand (alternate conformers, multiple chains/occupancies). 
+    # Keeping all of them yields a multi-fragment "molecule" (e.g. 4x or 2x the real atom count) that breaks both docking and symmetry-aware RMSD. 
+    # Therefore we split into disconnected fragments and keep only the largest single copy — that is the one true ligand instance.
+    frags = Chem.GetMolFrags(raw, asMols=True, sanitizeFrags=False)             # Decompose the parsed block into its disconnected molecular fragments
+    if len(frags) > 1:                                                          # If more than one copy/fragment is present...
+        raw = max(frags, key=lambda m: m.GetNumAtoms())                         # ...keep the largest, i.e. one complete copy of the ligand
+        log.info("Ligand %s: %d fragments in block, kept largest (%d atoms)",   # Record that we collapsed a multi-copy block to a single instance
+                 resname, len(frags), raw.GetNumAtoms())                        # (this is the durable fix for the multi-conformer reference bug)
+
     coords = raw.GetConformer().GetPositions()                                  # Extract the raw (X, Y, Z) numerical coordinate matrix for all atoms
     centroid = tuple(np.round(coords.mean(axis=0), 3))                          # Calculate the geometric center (mean of coordinates) and round to 3 decimals
 
+    # Bond orders must come from the CCD template. Crystal coordinates carry no bond-order information, so RDKit's distance-based perception 
+    # produces chemically wrong molecules (saturated rings, lost aromaticity) that silently corrupt docking, parameterization and RMSD. 
+    # We therefore make templating authoritative: if it fails, fail loudly and return nulls rather than writing a plausible-looking but incorrect structure to disk.
     template_smi = _ccd_smiles(resname)                                         # Call the helper function to fetch the ideal 1D chemical topology
-    mol = raw                                                                   # Initialize the final molecule variable with the raw 3D data
-    smiles = None                                                               # Initialize the SMILES string variable as None
-    if template_smi:                                                            # Check if the network fetch for the ideal SMILES was successful
-        template = Chem.MolFromSmiles(template_smi)                             # Convert the ideal 1D SMILES string into an RDKit template molecule
-        if template is not None:                                                # Verify that RDKit successfully parsed the downloaded SMILES
-            try:                                                                # Begin error-handling block for the complex mathematical graph-matching
-                mol = AllChem.AssignBondOrdersFromTemplate(template, raw)       # Map the double/aromatic bonds from the 1D template onto the 3D coordinates
-                smiles = Chem.MolToSmiles(Chem.RemoveHs(mol))                   # Strip hydrogens and generate a clean SMILES string from the newly repaired 3D molecule
-            except Exception as e:  # noqa: BLE001                              # Catch algorithmic failures (e.g., coordinates don't match the template graph)
-                log.warning("Bond-order assignment failed for %s (%s); "        # Log a detailed warning that template matching failed
-                            "using perceived bonds.", resname, e)               # Inform the user that the pipeline will fall back to RDKit's distance-based guesses
-    if smiles is None:                                                          # If templating failed or the network was down, fallback block triggers
-        try:                                                                    # Begin error handling for manual sanitization
-            Chem.SanitizeMol(mol)                                               # Force RDKit to guess bond orders based purely on inter-atomic distances
-            smiles = Chem.MolToSmiles(Chem.RemoveHs(mol))                       # Generate a SMILES string from these guessed bond orders
-        except Exception:  # noqa: BLE001                                       # Catch sanitization failures (e.g., impossible distances in the PDB)
-            smiles = None                                                       # Accept that we cannot generate a valid SMILES for this corrupted molecule
+    if not template_smi:                                                        # If the network fetch for the canonical SMILES failed...
+        log.error("No CCD SMILES for %s; refusing to write distance-perceived " # ...refuse to fall back to guessed bonds
+                  "chemistry. Check network / resname.", resname)               # Tell the user exactly why extraction was aborted
+        return None, None, None                                                 # Abort: a wrong reference is worse than a missing one
+    template = Chem.MolFromSmiles(template_smi)                                 # Convert the ideal 1D SMILES string into an RDKit template molecule
+    if template is None:                                                        # If even the canonical SMILES could not be parsed...
+        log.error("CCD SMILES for %s did not parse (%s)", resname, template_smi)  # ...log it explicitly
+        return None, None, None                                                 # Abort rather than guess
+    try:                                                                        # Begin error-handling for the graph-matching templating step
+        mol = AllChem.AssignBondOrdersFromTemplate(template, raw)               # Map the double/aromatic bonds from the 1D template onto the 3D coordinates
+        smiles = Chem.MolToSmiles(Chem.RemoveHs(mol))                           # Strip hydrogens and generate a clean canonical SMILES from the repaired molecule
+    except Exception as e:  # noqa: BLE001                                      # Catch algorithmic failures (e.g., coordinates don't match the template graph)
+        log.error("Bond-order templating failed for %s (%s); skipping ligand "  # Fail loud: do not silently fall back to perceived bonds
+                  "(do not trust distance-perceived bonds).", resname, e)       # Explain the deliberate refusal
+        return None, None, None                                                 # Abort extraction for this ligand
 
     ensure_dir(out_sdf.parent)                                                  # Ensure the target output directory exists on the filesystem before writing
     writer = Chem.SDWriter(str(out_sdf))                                        # Initialize the RDKit Spatial Data File (SDF) writer engine
@@ -184,7 +194,7 @@ def prepare(pdb_id: str, chain: str, ligand_resname: str, work_dir) -> PreparedT
         >>> prepare("6OIM", "A", "6O7", "./data")
         PreparedTarget(pdb_id='6OIM', receptor_pdb=..., ligand_sdf=..., ...)
     """
-    work_dir = Path(work_dir)                                                   # Cast the provided working directory string into a robust Pathlib object
+    work_dir = Path(work_dir).resolve()                                         # Absolute path: DiffDock/Boltz run with a different cwd, so relative paths break
     raw = fetch_pdb(pdb_id, work_dir / "raw")                                   # Call utility function to download the PDB file and save it to the 'raw' folder
     receptor = _write_receptor(raw, chain, work_dir / "processed" / f"{pdb_id}_receptor.pdb") # Clean the protein and save it to the 'processed' folder
     sdf, smiles, center = _extract_ligand(                                      # Call the complex ligand extraction function and unpack its three return values

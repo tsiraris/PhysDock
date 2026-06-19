@@ -35,26 +35,62 @@ htmlcov/
 # ==========================================
 # 4. Data & Chemistry/Structural Biology Artifacts
 # ==========================================
-# Ignore all data contents but keep the directory structures
+# Ignore bulky / regenerable data, but keep the directory structure.
 data/raw/*
 data/cache/*
 data/processed/*
-results/
 weights/
 
-# Keep standard gitkeep files
+# Keep .gitkeep placeholders so empty dirs survive in git
 !data/raw/.gitkeep
 !data/cache/.gitkeep
 !data/processed/.gitkeep
 
-# Molecular & Chemistry structures (Ignored except specific reference CSVs)
-*.pdb
+# Keep the prepared state file and the cleaned reference poses (small, needed for
+# reproducibility and RMSD evaluation). The raw multi-copy *.sdf stay ignored.
+!data/processed/target_prep.json
+!data/processed/*_clean.sdf
+!data/processed/*_receptor.pdb
+
+# ==========================================
+# 5. Results — ignore heavy intermediates, KEEP lightweight evidence
+# ==========================================
+# Ignore everything under results/ by default...
+results/*
+# ...then re-include the small, reviewer-facing deliverables.
+# (Parent dirs must be un-ignored before nested files can be kept.)
+!results/report/
+results/report/*
+!results/report/report.md
+!results/report/summary.json
+!results/report/merged.csv
+!results/report/figures/
+!results/report/figures/**
+!results/diffdock/
+results/diffdock/*
+!results/diffdock/poses.csv
+!results/chem/
+results/chem/*
+!results/chem/chem_gate.csv
+!results/physics/
+results/physics/*
+!results/physics/physics.csv
+!results/ensemble/
+results/ensemble/*
+!results/ensemble/ensemble.csv
+!results/boltz/
+results/boltz/*
+!results/boltz/boltz.csv
+# Note: results/boltz/preds/** (MSAs, PDBs, tensors — hundreds of MB) stays ignored.
+
+# ==========================================
+# 6. Molecular structures (global rules)
+# ==========================================
 *.cif
-*.sdf
 !data/ligands/*.csv
 
 # ==========================================
-# 5. MLOps, Tracking & IDEs
+# 7. MLOps, Tracking & IDEs
 # ==========================================
 wandb/
 mlruns/
@@ -68,7 +104,7 @@ mlruns/
 *.sln
 
 # ==========================================
-# 6. OS & System Specific
+# 8. OS & System Specific
 # ==========================================
 .DS_Store
 .DS_Store?
@@ -78,7 +114,7 @@ ehthumbs.db
 Icon?
 
 # ==========================================
-# 7. Office, Archives & Tools
+# 9. Office, Archives & Tools
 # ==========================================
 *.zip
 *.tar.gz
@@ -86,5 +122,5 @@ Icon?
 *.7z
 *.doc
 *.docx
-*.pdf
 *.xml
+# Note: *.pdf and *.png are NOT ignored — figures render on GitHub.

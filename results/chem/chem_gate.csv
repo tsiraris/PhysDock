@@ -1,0 +1,5 @@
+ligand_id,smiles,valid,mw,logp,tpsa,hbd,hba,rotb,sa_score,pains_alerts,in_windows,passes,reason
+sotorasib,CCC(=O)N1CCN(c2nc(=O)n(-c3c(C)ccnc3C(C)C)c3nc(-c4c(O)cccc4F)c(F)cc23)[C@@H](C)C1,True,562.62,4.71,104.45,1,8,5,3.74,0,True,True,ok
+adagrasib,C[C@H](F)C(=O)N1CCN(c2nc(OC[C@@H]3CCCN3C)nc3c2CCN(c2cccc4cccc(Cl)c24)C3)C[C@@H]1CC#N,True,606.15,4.61,88.83,0,8,7,4.31,0,True,True,ok
+ars1620,CCC(=O)N1CCN(c2ncnc3c(F)c(-c4c(O)cccc4F)c(Cl)cc23)CC1,True,432.86,3.99,69.56,1,5,3,2.74,0,True,True,ok
+ars853,C=CC(=O)N1CC(N2CCN(C(=O)CNc3cc(C4(C)CC4)c(Cl)cc3O)CC2)C1,True,432.95,2.05,76.12,2,5,6,3.0,0,True,True,ok

@@ -1,0 +1,29 @@
+{
+  "correlations": [
+    {
+      "pred_col": "affinity_pred_value",
+      "n": 0,
+      "rho": null,
+      "p": null,
+      "usable": false,
+      "note": "underpowered: only 0 labelled points (need >= 4); fill pchembl in the manifest"
+    },
+    {
+      "pred_col": "ligand_strain_kcal",
+      "n": 0,
+      "rho": null,
+      "p": null,
+      "usable": false,
+      "note": "underpowered: only 0 labelled points (need >= 4); fill pchembl in the manifest"
+    },
+    {
+      "pred_col": "interaction_energy_kj",
+      "n": 0,
+      "rho": null,
+      "p": null,
+      "usable": false,
+      "note": "underpowered: only 0 labelled points (need >= 4); fill pchembl in the manifest"
+    }
+  ],
+  "n_pose_success": 0
+}

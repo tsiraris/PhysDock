@@ -68,7 +68,7 @@ def pose_rmsd_vs_reference(pred_sdf: str, ref_sdf: str) -> Optional[float]:
             ref.adjacency_matrix, mob.adjacency_matrix))                        # ...and their connectivity graphs (to resolve symmetry)
     # Fallback: RDKit's CalcRMS
     except Exception as e:  # noqa: BLE001                                      # Catch any exceptions (e.g., spyrmsd missing or topology mismatch)
-        log.info("spyrmsd unavailable/failed (%s); RDKit CalcRMS (in-frame) fallback.", e) # Log a notice that the script is falling back to RDKit
+        log.info("spyrmsd unavailable/failed (%r); RDKit CalcRMS (in-frame) fallback.", e) # Log the exception repr so empty-message errors are visible
         # CalcRMS is also symmetry-aware (it minimises over atom-mapping automorphisms) and does not superimpose the molecules. 
         # Like spyrmsd, it measures the RMSD in the existing shared coordinate frame, so it wouldn't wrongly reward a pose that is in the wrong pocket location but the right shape.
         try:                                                                    # Attempt the fallback calculation

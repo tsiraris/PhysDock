@@ -105,6 +105,8 @@ def run(cfg, input_yaml: Path, out_dir: Path) -> None:
            "--diffusion_samples", str(cfg.get("boltz", "diffusion_samples", default=5)),  # Inject the multi-seed sampling count (creates the ensemble)
            "--recycling_steps", str(cfg.get("boltz", "recycling_steps", default=3)),      # Inject the neural network recycling iterations (refinement)
            "--output_format", "pdb"]                                        # Force the structural output format to standard PDB
+    if cfg.get("boltz", "no_kernels", default=True):                        # Disable cuequivariance triangle kernels (they segfault vs conda cuBLAS); pure-PyTorch path is stable
+        cmd.append("--no_kernels")                                          # Slightly slower, dependency-light, no native cuBLAS clash
     if cfg.get("boltz", "use_msa_server", default=True):                    # Check if the config dictates using cloud MSA over local compute
         cmd.append("--use_msa_server")                                      # Append the cloud MSA flag to save local CPU/Storage resources
     log.info("Boltz cmd:\n  %s", " ".join(cmd))                             # Log the exact CLI command being executed for reproducibility
