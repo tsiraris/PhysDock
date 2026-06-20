@@ -264,9 +264,12 @@ def passing_ligand_ids(gate_csv: str = "results/chem/chem_gate.csv") -> Optional
     from pathlib import Path                                            # Local import for the existence check.
 
     p = Path(gate_csv)                                                  # Resolve the ledger path.
-    if not p.exists():                                                  # Gate never ran (e.g. stage 03 invoked standalone)...
+    if not p.exists() or p.stat().st_size == 0:                         # Gate never ran, or wrote an empty ledger...
         return None                                                     # ...signal "do not filter" so the pipeline still works.
-    df = pd.read_csv(p)                                                 # Load the per-ligand verdicts.
+    try:                                                                # An empty/headerless file raises EmptyDataError...
+        df = pd.read_csv(p)                                             # Load the per-ligand verdicts.
+    except pd.errors.EmptyDataError:                                    # ...treat that the same as "gate not run".
+        return None                                                     # Fail open rather than crashing the GPU stage.
     if "passes" not in df.columns or "ligand_id" not in df.columns:     # Malformed/empty ledger...
         return None                                                     # ...fail open rather than dropping everything.
     mask = df["passes"].astype(str).str.strip().str.lower().isin(["true", "1"])  # Robustly coerce the bool column (handles "True"/True/1).

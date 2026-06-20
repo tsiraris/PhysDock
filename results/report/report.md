@@ -5,7 +5,7 @@ A physics-aware diffusion pipeline for protein–ligand interaction on an oncolo
 
 ## Pose accuracy (geometry)
 - Ligands with a crystal reference scored: **4**
-- Top-pose successes (RMSD ≤ 2.0 Å): **0/4**
+- Top-pose successes (RMSD ≤ 2.0 Å): **1/4**
 
 ![pose rmsd](figures/pose_rmsd.png)
 
@@ -20,10 +20,10 @@ _Sign convention: `affinity_pred_value` (Boltz, log10 IC50 µM) and `interaction
 
 | ligand_id | role | pchembl | smiles | pose_rmsd | pose_success | iptm | affinity_pred_value | affinity_prob_binary | ligand_strain_kcal | interaction_energy_kj | pose_drift_rmsd | n_poses | pose_spread_rmsd | n_clusters |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| sotorasib | covalent_clinical |  | CCC(=O)N1CCN(c2nc(=O)n(-c3c(C)ccnc3C(C)C)c3nc(-c4c(O)cccc4F)c(F)cc23)[C@@H](C)C1 | 2.722 | False | 0.9771263599395752 | 0.6274880170822144 | 0.8515259027481079 |  | -304.436 | 1.281 | 1 |  |  |
-| adagrasib | covalent_clinical |  | C[C@H](F)C(=O)N1CCN(c2nc(OC[C@@H]3CCCN3C)nc3c2CCN(c2cccc4cccc(Cl)c24)C3)C[C@@H]1CC#N | 6.654 | False | 0.9861578941345216 | -1.988565444946289 | 0.9550476670265198 |  | -439.411 | 1.401 | 6 | 2.046 | 1.0 |
-| ars1620 | covalent_tool |  | CCC(=O)N1CCN(c2ncnc3c(F)c(-c4c(O)cccc4F)c(Cl)cc23)CC1 | 8.182 | False | 0.9868300557136536 | -0.7051113843917847 | 0.9513728618621826 |  | -263.312 | 1.74 | 3 | 1.82 | 1.0 |
-| ars853 | covalent_tool |  | C=CC(=O)N1CC(N2CCN(C(=O)CNc3cc(C4(C)CC4)c(Cl)cc3O)CC2)C1 | 3.144 | False | 0.9819154143333436 | -0.2010602355003357 | 0.753656804561615 |  | -407.131 | 1.393 | 2 | 1.322 | 1.0 |
+| sotorasib | covalent_clinical |  | CCC(=O)N1CCN(c2nc(=O)n(-c3c(C)ccnc3C(C)C)c3nc(-c4c(O)cccc4F)c(F)cc23)[C@@H](C)C1 | 1.189 | True | 0.9755867719650269 | 0.7074805498123169 | 0.8509381413459778 |  | -413.994 | 0.997 | 1 |  |  |
+| adagrasib | covalent_clinical |  | C[C@H](F)C(=O)N1CCN(c2nc(OC[C@@H]3CCCN3C)nc3c2CCN(c2cccc4cccc(Cl)c24)C3)C[C@@H]1CC#N | 2.923 | False | 0.9867632985115052 | -1.9054808616638184 | 0.9503950476646424 |  | -475.938 | 1.421 | 1 |  |  |
+| ars1620 | covalent_tool |  | CCC(=O)N1CCN(c2ncnc3c(F)c(-c4c(O)cccc4F)c(Cl)cc23)CC1 | 4.788 | False | 0.9847179651260376 | -0.6808910965919495 | 0.9489796161651612 |  | -297.293 | 1.076 | 3 | 1.589 | 1.0 |
+| ars853 | covalent_tool |  | C=CC(=O)N1CC(N2CCN(C(=O)CNc3cc(C4(C)CC4)c(Cl)cc3O)CC2)C1 | 7.37 | False | 0.980377435684204 | -0.1065341830253601 | 0.7453189492225647 |  | -277.834 | 1.51 | 1 |  |  |
 
 ## What is NOT claimed
 - No wet-lab validation; all signals are *in silico*.

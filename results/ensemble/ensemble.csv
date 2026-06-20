@@ -1,5 +1,5 @@
 ligand_id,n_poses,pose_spread_rmsd,n_clusters,best_confidence
-adagrasib,6,2.046,1.0,-1.86
-ars1620,3,1.82,1.0,-1.44
-ars853,2,1.322,1.0,-1.06
-sotorasib,1,,,-2.05
+adagrasib,1,,,-2.83
+ars1620,3,1.589,1.0,-2.01
+ars853,1,,,-2.97
+sotorasib,1,,,-1.0

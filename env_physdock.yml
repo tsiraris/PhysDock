@@ -1,3 +1,9 @@
+# PhysDock main environment (physics + Boltz).
+# NOTE: install torch separately after creating this env, to match the box CUDA:
+#   conda activate physdock && pip install torch==2.6.0
+# Then set the Boltz checkpoint workaround in the env (see README):
+#   TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
+# The physdock package itself is installed via:  pip install -e . --no-deps
 name: physdock
 channels:
   - conda-forge
@@ -291,7 +297,6 @@ dependencies:
       - omegaconf==2.3.1
       - opt-einsum==3.4.0
       - pdb4amber==22.0
-      - physdock==0.1.0
       - propcache==0.5.2
       - protobuf==5.29.6
       - psutil==7.2.2
@@ -309,8 +314,6 @@ dependencies:
       - setuptools==81.0.0
       - smmap==5.0.3
       - spyrmsd==0.9.0
-      - torch==2.12.0
-      - triton==3.7.0
       - types-requests==2.33.0.20260518
       - urllib3==2.7.0
       - wandb==0.18.7

@@ -49,7 +49,10 @@ weights/
 # Keep the prepared state file and the cleaned reference poses (small, needed for
 # reproducibility and RMSD evaluation). The raw multi-copy *.sdf stay ignored.
 !data/processed/target_prep.json
-!data/processed/*_clean.sdf
+!data/processed/6OIM_MOV.sdf
+!data/processed/6UT0_M1X.sdf
+!data/processed/5V9U_91S.sdf
+!data/processed/5F2E_5UT.sdf
 !data/processed/*_receptor.pdb
 
 # ==========================================
@@ -86,7 +89,13 @@ results/boltz/*
 # ==========================================
 # 6. Molecular structures (global rules)
 # ==========================================
+# These broad ignores are kept, but the specific allow-lists in sections 4 & 5
+# above (which appear earlier and use explicit paths) take precedence for the
+# files we want to keep. Anything else (raw PDB/CIF/SDF) stays out.
 *.cif
+# (We intentionally do NOT blanket-ignore *.pdb / *.sdf here, because the
+#  reference receptors and cleaned poses are allow-listed above; any stray
+#  raw structures live under data/raw or results/* and are already ignored.)
 !data/ligands/*.csv
 
 # ==========================================
@@ -120,7 +129,8 @@ Icon?
 *.tar.gz
 *.rar
 *.7z
+# Keep the project Summary write-up (the main narrative deliverable).
 *.doc
 *.docx
 *.xml
-# Note: *.pdf and *.png are NOT ignored — figures render on GitHub.
+# Note: *.pdf and *.png are NOT ignored — figures and any exported report render on GitHub.

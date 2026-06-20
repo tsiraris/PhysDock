@@ -5,7 +5,7 @@
     "sotorasib": {
       "pdb_id": "6OIM",
       "receptor_pdb": "data/processed/6OIM_receptor.pdb",
-      "ref_sdf": "data/processed/6OIM_MOV_clean.sdf",
+      "ref_sdf": "data/processed/6OIM_MOV.sdf",
       "smiles": "CCC(=O)N1CCN(c2nc(=O)n(-c3c(C)ccnc3C(C)C)c3nc(-c4c(O)cccc4F)c(F)cc23)[C@@H](C)C1",
       "pocket_center": [
         1.872,
@@ -18,12 +18,12 @@
     "adagrasib": {
       "pdb_id": "6UT0",
       "receptor_pdb": "data/processed/6UT0_receptor.pdb",
-      "ref_sdf": "data/processed/6UT0_M1X_clean.sdf",
+      "ref_sdf": "data/processed/6UT0_M1X.sdf",
       "smiles": "C[C@H](F)C(=O)N1CCN(c2nc(OC[C@@H]3CCCN3C)nc3c2CCN(c2cccc4cccc(Cl)c24)C3)C[C@@H]1CC#N",
       "pocket_center": [
-        6.035,
-        3.676,
-        11.537
+        34.693,
+        10.589,
+        29.006
       ],
       "pchembl": null,
       "role": "covalent_clinical"
@@ -31,12 +31,12 @@
     "ars1620": {
       "pdb_id": "5V9U",
       "receptor_pdb": "data/processed/5V9U_receptor.pdb",
-      "ref_sdf": "data/processed/5V9U_91S_clean.sdf",
+      "ref_sdf": "data/processed/5V9U_91S.sdf",
       "smiles": "CCC(=O)N1CCN(c2ncnc3c(F)c(-c4c(O)cccc4F)c(Cl)cc23)CC1",
       "pocket_center": [
-        -10.083,
-        5.128,
-        21.806
+        -8.764,
+        8.416,
+        13.895
       ],
       "pchembl": null,
       "role": "covalent_tool"
@@ -44,7 +44,7 @@
     "ars853": {
       "pdb_id": "5F2E",
       "receptor_pdb": "data/processed/5F2E_receptor.pdb",
-      "ref_sdf": "data/processed/5F2E_5UT_clean.sdf",
+      "ref_sdf": "data/processed/5F2E_5UT.sdf",
       "smiles": "C=CC(=O)N1CC(N2CCN(C(=O)CNc3cc(C4(C)CC4)c(Cl)cc3O)CC2)C1",
       "pocket_center": [
         15.09,

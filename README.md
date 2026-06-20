@@ -52,27 +52,27 @@ Symmetry-aware heavy-atom RMSD between the top-ranked generative pose and the cr
 
 | Ligand | RMSD (Å) | Outcome |
 | --- | ---: | --- |
-| sotorasib | **2.72** | near-native, correct pocket |
-| ARS-853 | **3.14** | near-native, correct pocket |
-| adagrasib | 6.65 | misplaced (large, flexible) |
-| ARS-1620 | 8.18 | misplaced |
+| sotorasib | **1.19** | docking success (sub-2 Å) |
+| adagrasib | **2.92** | near-native, correct pocket |
+| ARS-1620 | 4.79 | partially displaced |
+| ARS-853 | 7.37 | misplaced |
 
 ![Pose RMSD vs crystal](results/report/figures/pose_rmsd.png)
 
-DiffDock-L recovered a **near-native binding mode (≤ 3.2 Å)** for the two more rigid inhibitors and placed the two larger, more flexible ligands in a plausible but incorrect sub-pocket orientation. The structural overlays below show the crystal pose (grey) against the predicted pose (teal) for the two near-native cases:
+DiffDock-L reproduced the crystallographic pose of **sotorasib to 1.19 Å (an outright docking success, < 2 Å)** and **adagrasib to 2.92 Å (near-native)**, with the remaining two ligands progressively more displaced (4.79 Å, 7.37 Å). The structural overlays below show the crystal pose (grey) against the predicted pose (teal) for the two best cases:
 
-| sotorasib (2.72 Å) | ARS-853 (3.14 Å) |
+| sotorasib (1.19 Å) | adagrasib (2.92 Å) |
 | --- | --- |
-| ![sotorasib overlay](results/report/figures/overlays/overlay_sotorasib.png) | ![ARS-853 overlay](results/report/figures/overlays/overlay_ars853.png) |
+| ![sotorasib overlay](results/report/figures/overlays/overlay_sotorasib.png) | ![adagrasib overlay](results/report/figures/overlays/overlay_adagrasib.png) |
 
-This split is an **expected and reportable limitation, not a failure**: DiffDock-L docks *non-covalently* and applies no constraint tethering the electrophilic acrylamide warhead to **Cys12**, the residue these inhibitors covalently modify. The result is presented as a faithful characterization of the method's **applicability domain** — it reproduces rigid inhibitors well and degrades predictably on larger flexible covalent binders. (Covalent modeling is on the roadmap below.)
+This graded outcome is an **expected and reportable characterization, not a failure**: DiffDock-L docks *non-covalently* and applies no constraint tethering the electrophilic warhead to **Cys12**, the residue these inhibitors covalently modify. The pipeline therefore maps the method's **applicability domain** — near-native for part of the set, progressively displaced for the larger/more flexible binders. Run-to-run RMSDs vary by a few tenths of an Å (DiffDock-L is stochastic); the qualitative spread reproduces across independent runs. (Covalent modeling is on the roadmap below.)
 
 ### Supporting signals
 
 - **Co-folding (Boltz-2):** high interface confidence for all four complexes (ipTM **0.98**).
-- **Predicted affinity:** reported but **statistically underpowered** (n = 4, experimental labels unfilled); no Spearman ρ is claimed. Ranking the clinical drug sotorasib weakest is a transparent miss, recorded rather than omitted.
-- **Physics plausibility (OpenMM):** all four poses gave sane interaction-energy proxies (−263 to −440 kJ/mol) and small post-minimization drift (0.8–1.7 Å) — the generative poses are stable under a molecular-mechanics force field. Reported as a relaxation/plausibility proxy, **not** a binding free energy.
-- **Conformational consistency:** ensemble analysis found a single dominant binding-mode cluster per ligand (pose spread 1.3–2.0 Å) — DiffDock-L was internally self-consistent.
+- **Predicted affinity:** reported but **statistically underpowered** (n = 4, experimental labels unfilled); no Spearman ρ is claimed. Boltz-2 ranks adagrasib strongest and sotorasib weakest — the latter a transparent miss for a potent clinical drug, recorded rather than omitted.
+- **Physics plausibility (OpenMM):** all four poses gave sane interaction-energy proxies (−278 to −476 kJ/mol) and small post-minimization drift (1.0–1.5 Å) — the generative poses are stable under a molecular-mechanics force field. Reported as a relaxation/plausibility proxy, **not** a binding free energy.
+- **Conformational consistency:** where more than one pose cleared the confidence gate (ARS-1620), the surviving poses fell into a single binding-mode cluster (spread ≈ 1.6 Å) — DiffDock-L was internally self-consistent rather than scattering hypotheses.
 
 **Not claimed:** no wet-lab validation (all signals *in silico*); the OpenMM term is a proxy, not MM-GBSA/FEP free energy; the affinity correlation is underpowered until experimental labels are added; reported confidences are model self-estimates.
 
@@ -91,7 +91,7 @@ This split is an **expected and reportable limitation, not a failure**: DiffDock
 
 ## 🛠️ Quickstart & Usage
 
-The pipeline is decoupled. The analytical core (RDKit, Pandas, Biopython) runs on any local CPU machine for rapid data prep and reporting; the heavy ML/physics engines are added on a GPU box. Because DiffDock-L and the PhysDock/Boltz stack require **mutually incompatible** PyTorch builds, they live in **two separate conda environments**. Both are captured exactly in `env_physdock.yml` and `env_diffdock.yml`.
+The pipeline is decoupled. The analytical core (RDKit, Pandas, Biopython) runs on any local CPU machine for rapid data prep and reporting; the heavy ML/physics engines are added on a GPU box. Because DiffDock-L and the PhysDock/Boltz stack require **mutually incompatible** PyTorch builds, they live in **two separate conda environments**. The main env is captured in `env_physdock.yml`; DiffDock-L's install is order-dependent (PyTorch from the CUDA-12.1 index, then matched PyG wheels, then ProDy `--no-deps`), so it is provided as the script `setup_diffdock.sh` rather than a flat YAML that cannot rebuild.
 
 ```bash
 # --- analytical core (CPU, any machine) ---
@@ -101,9 +101,11 @@ python scripts/00_setup_check.py          # -> SMOKE TEST PASSED
 # --- main environment (physics + Boltz), reproducible from the export ---
 conda env create -f env_physdock.yml      # creates 'physdock'
 conda activate physdock
+pip install torch==2.6.0                   # installed separately to match box CUDA
 
 # --- DiffDock-L in its own environment (its torch stack conflicts with the above) ---
-conda env create -f env_diffdock.yml      # creates 'diffdock'
+conda create -y -n diffdock python=3.9    # DiffDock-L pins py3.9
+bash setup_diffdock.sh                    # ordered install (torch cu121 -> PyG wheels -> ProDy)
 git clone https://github.com/gcorso/DiffDock ~/DiffDock
 export PHYSDOCK_DIFFDOCK_DIR=~/DiffDock
 ```
@@ -168,7 +170,7 @@ PhysDock/
 │   ├── run_all.sh                      # CI/CD end-to-end execution script
 │   └── fetch_chembl_affinities.py      # Auxiliary biological API scraper
 ├── env_physdock.yml                    # Reproducible conda env (physics + Boltz)
-├── env_diffdock.yml                    # Reproducible conda env (DiffDock-L)
+├── setup_diffdock.sh                   # Ordered DiffDock-L env install (replaces a flat YAML)
 ├── results/report/figures/             # pose_rmsd.png + overlays/ (crystal vs predicted)
 ├── notebooks/01_quickstart.ipynb       # Interactive tutorial
 ├── pyproject.toml                      # Modern PEP 517/518 build configuration

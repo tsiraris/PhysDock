@@ -25,5 +25,5 @@
       "note": "underpowered: only 0 labelled points (need >= 4); fill pchembl in the manifest"
     }
   ],
-  "n_pose_success": 0
+  "n_pose_success": 1
 }

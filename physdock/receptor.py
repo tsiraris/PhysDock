@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+import re
 import requests
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -64,12 +65,26 @@ def _ccd_smiles(resname: str) -> Optional[str]:
         >>> _ccd_smiles("6O7")
         'C1=CC(=C(C=C1F)O)C2=C(C(=O)N(C2=O)C3C(CC(C(C3)C(F)(F)F)C)N4CCN(CC4)C(=O)C=C)C(C)C'
     """
-    url = f"https://data.rcsb.org/rest/v1/core/chemcomp/{resname.upper()}"      # Construct the REST API endpoint using the uppercase residue name
+    url = f"https://files.rcsb.org/ligands/download/{resname.upper()}.cif"      # Canonical CCD component file for this 3-letter code
     try:                                                                        # Begin error-handling block for the external network request
         r = requests.get(url, timeout=30)                                       # Execute HTTP GET request with a strict 30-second timeout
         r.raise_for_status()                                                    # Throw an exception immediately if the HTTP status is not 200 OK
-        desc = r.json().get("rcsb_chem_comp_descriptor", {})                    # Parse the JSON response and safely extract the descriptor dictionary
-        return desc.get("smiles_stereo") or desc.get("smiles")                  # Return stereospecific SMILES if available, fallback to standard SMILES
+        text = r.text                                                           # Raw mmCIF text of the chemical component
+        cactvs_canon, any_canon, any_smiles = None, None, None                  # Candidate SMILES in order of preference
+        for line in text.splitlines():                                          # Scan each descriptor row in the CIF
+            if "SMILES" not in line:
+                continue
+            m = re.search(r'"([^"]+)"', line)                                   # SMILES payload is the quoted field
+            if not m:
+                continue
+            smi = m.group(1).strip()
+            if "SMILES_CANONICAL" in line and "CACTVS" in line:
+                cactvs_canon = cactvs_canon or smi
+            elif "SMILES_CANONICAL" in line:
+                any_canon = any_canon or smi
+            else:
+                any_smiles = any_smiles or smi
+        return cactvs_canon or any_canon or any_smiles                          # Best available SMILES, or None
     except Exception as e:  # noqa: BLE001                                      # Catch any network or parsing exceptions (ignoring broad exception lint)
         log.warning("CCD lookup failed for %s (%s)", resname, e)                # Log a warning message with the ligand name and the specific error
         return None                                                             # Return None so the pipeline knows the fetch failed and can fallback
