@@ -32,12 +32,18 @@ conda run -n "$ENV" python -m pip install torch-geometric
 conda run -n "$ENV" python -m pip install torch-scatter torch-sparse torch-cluster \
   -f https://data.pyg.org/whl/torch-2.2.2+cu121.html
 
-# 4. DiffDock-L's other runtime deps (pure-python / numpy-safe).
-conda run -n "$ENV" python -m pip install e3nn fair-esm rdkit pyyaml pandas biopython
+# 4. DiffDock-L's other runtime deps. Pin numpy 1.26.4: torch 2.2.2 and the PyG
+#    wheels are compiled against the numpy-1.x ABI, and ProDy 2.4.1 still calls
+#    numpy.alltrue (removed in numpy 2.0). Without this pin, pip silently
+#    upgrades numpy to 2.x and both torch and ProDy fail to import.
+conda run -n "$ENV" python -m pip install "numpy==1.26.4" e3nn fair-esm rdkit pyyaml pandas biopython
 
 # 5. ProDy LAST, with --no-deps, so its numpy<1.24 metadata cap does not
 #    downgrade numpy (which would break the compiled torch-scatter/cluster).
 conda run -n "$ENV" python -m pip install --no-deps prody==2.4.1
+
+# 6. Re-assert numpy 1.26.4 in case a step above nudged it, then verify.
+conda run -n "$ENV" python -m pip install "numpy==1.26.4"
 
 # 6. Verify the full stack imports and CUDA is visible.
 conda run -n "$ENV" python -c "import torch, torch_geometric, torch_scatter, torch_cluster, torch_sparse, e3nn, esm, rdkit, prody; print('diffdock OK', torch.__version__, 'cuda', torch.cuda.is_available())"
